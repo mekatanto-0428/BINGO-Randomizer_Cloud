@@ -103,7 +103,7 @@ if not VIEW_ONLY:
                     state.flash = False
 
                 # 自動バックアップ（CSV生成）
-                if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
+                if state.draw_count % AUTO_BACKUP_INTERVAL == 5:
                     buf = io.StringIO()
                     w = csv.writer(buf)
                     w.writerow(["順番", "数字"])
