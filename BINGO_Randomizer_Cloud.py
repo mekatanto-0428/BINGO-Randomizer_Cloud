@@ -95,7 +95,12 @@ if not VIEW_ONLY:
 
                 st.audio("DrumRoll_Finish.mp3", autoplay=True)
 
-                
+                # BINGO演出
+                if len(state.drawn) >= 5:
+                    state.flash = True
+                    st.audio("bingo.mp3", autoplay=True)
+                    time.sleep(1.2)
+                    state.flash = False
 
                 # 自動バックアップ（CSV生成）
                 if state.draw_count % AUTO_BACKUP_INTERVAL == 5:
