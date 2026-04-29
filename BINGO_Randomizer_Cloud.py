@@ -109,7 +109,7 @@ if not VIEW_ONLY:
             disabled=(state.phase != "idle")
         ):
             state.phase = "rolling"
-            play_audio("Drumroll.mp3")
+            play_audio("DrumRoll.mp3")
             st.rerun()
 
     with col2:
