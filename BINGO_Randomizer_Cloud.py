@@ -4,9 +4,9 @@ from datetime import datetime
 from dataclasses import dataclass, field
 
 # =========================
-# 管理者設定（CloudはSecrets）
+# 管理者設定
 # =========================
-ADMIN_PIN = os.environ.get("ADMIN_PIN", "8240")
+ADMIN_PIN = os.environ.get("ADMIN_PIN", "0000")
 AUTO_BACKUP_INTERVAL = 5
 
 # =========================
@@ -28,7 +28,7 @@ def get_state():
 state = get_state()
 
 # =========================
-# モード判定（観客 / 司会）
+# モード判定
 # =========================
 VIEW_ONLY = st.query_params.get("view") == "viewer"
 
@@ -59,8 +59,11 @@ if not VIEW_ONLY:
 def play_audio(filename):
     if VIEW_ONLY or not sound_on:
         return
-    with open(filename, "rb") as f:
-        st.audio(f.read(), format="audio/mp3", autoplay=True)
+    try:
+        with open(filename, "rb") as f:
+            st.audio(f.read(), format="audio/mp3", autoplay=True)
+    except FileNotFoundError:
+        st.warning(f"音声ファイルが見つかりません: {filename}")
 
 # =========================
 # タイトル
@@ -73,48 +76,59 @@ st.markdown(
 # =========================
 # プロジェクター向け特大数字
 # =========================
-st.markdown(f"""
-<div style="
-  font-size:160px;
-  text-align:center;
-  color:white;
-  background:#000;
-  padding:40px;
-  border-radius:30px;
-  margin-bottom:20px;">
-  {state.last if state.last else "START"}
-</div>
-""", unsafe_allow_html=True)
+st.markdown(
+    f"""
+    <div style="
+      font-size:160px;
+      text-align:center;
+      color:white;
+      background:#000;
+      padding:40px;
+      border-radius:30px;
+      margin-bottom:20px;">
+      {state.last if state.last else "START"}
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # =========================
-# 抽選ボタン（誤操作防止）
+# 操作ボタン
 # =========================
+
+# =====================
+# フェーズ①：抽選開始
+# =====================
 if not VIEW_ONLY:
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("🎲 抽 選", use_container_width=True,
-                     disabled=(state.phase != "idle")):
+        if st.button(
+            "🎲 抽 選",
+            use_container_width=True,
+            disabled=(state.phase != "idle")
+        ):
             state.phase = "rolling"
-            play_audio("DrumRoll.mp3")
+            play_audio("Drumroll.mp3")
             st.rerun()
 
     with col2:
         if st.button("🔄 リセット", use_container_width=True):
             state.confirm_reset = True
 
-# =========================
-# 抽選処理（sleepなし・安定）
-# =========================
+# =====================
+# フェーズ②：次の rerun で数字確定
+# =====================
 if state.phase == "rolling":
     if state.numbers:
         num = state.numbers.pop()
         state.drawn.append(num)
         state.last = num
         state.draw_count += 1
+
         play_audio("DrumRoll_Finish.mp3")
 
-        # BINGO演出
+        # BINGO演出（例：5個以上で）
         if len(state.drawn) >= 5:
             play_audio("bingo.mp3")
 
@@ -129,6 +143,7 @@ if state.phase == "rolling":
 
     state.phase = "idle"
     st.rerun()
+
 
 # =========================
 # リセット確認ダイアログ
@@ -178,7 +193,7 @@ if state.backup_csv:
     )
 
 # =========================
-# CSV復元（管理者PIN必須）
+# CSV復元（管理者PIN）
 # =========================
 if not VIEW_ONLY:
     st.divider()
@@ -203,7 +218,7 @@ if not VIEW_ONLY:
             st.success("✅ 抽選状態を復元しました")
 
 # =========================
-# B I N G O 列レイアウト
+# B I N G O 列表示
 # =========================
 st.divider()
 st.markdown("<h2 style='text-align:center;'>出た数字</h2>", unsafe_allow_html=True)
@@ -232,4 +247,3 @@ for col, (lab, rng) in zip(cols, labels.items()):
                     f"<div style='text-align:center;font-size:22px;margin:5px;color:#aaa;'>{n}</div>",
                     unsafe_allow_html=True
                 )
-import random, csv, io, os
