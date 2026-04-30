@@ -109,6 +109,7 @@ if not VIEW_ONLY:
             use_container_width=True,
             disabled=(state.phase != "idle")
         ):
+            
             state.phase = "rolling"
             play_audio("DrumRoll.mp3")
             st.stop()
@@ -143,7 +144,7 @@ if state.phase == "rolling":
             state.backup_csv = buf.getvalue()
 
     state.phase = "idle"
-    st.stop()
+    st.rerun()
 
 
 # =========================
