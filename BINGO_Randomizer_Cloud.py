@@ -112,7 +112,7 @@ if not VIEW_ONLY:
             
             state.phase = "rolling"
             play_audio("DrumRoll.mp3")
-            st.stop()
+            st.rerun()
 
     with col2:
         if st.button("🔄 リセット", use_container_width=True):
