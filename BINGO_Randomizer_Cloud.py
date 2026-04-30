@@ -130,8 +130,8 @@ if state.phase == "rolling":
         play_audio("DrumRoll_Finish.mp3")
 
         # BINGO演出（例：5個以上で）
-        if len(state.drawn) >= 5:
-            play_audio("bingo.mp3")
+        #if len(state.drawn) >= 5:
+        #    play_audio("bingo.mp3")
 
         # 自動バックアップ
         if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
