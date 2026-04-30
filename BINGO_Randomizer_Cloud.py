@@ -56,14 +56,15 @@ sound_on = False
 if not VIEW_ONLY:
     sound_on = st.toggle("🔊 効果音ON", value=True)
 
-#def play_audio(filename):
-#    if VIEW_ONLY or not sound_on:
- #       return
-  #  try:
-   #     with open(filename, "rb") as f:
-    #        st.audio(f.read(), format="audio/mp3", autoplay=True)
-    #except FileNotFoundError:
-     #   st.warning(f"音声ファイルが見つかりません: {filename}")
+def play_audio(filename):
+    if VIEW_ONLY or not sound_on:
+        return
+    try:
+        with open(filename, "rb") as f:
+            st.audio(f.read(), format="audio/mp3", autoplay=True)
+    except Exception as e:
+        st.error(f"音声再生エラー: {filename}")
+        st.exception(e)
 
 # =========================
 # タイトル
