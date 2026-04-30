@@ -111,7 +111,7 @@ if not VIEW_ONLY:
         ):
             state.phase = "rolling"
             play_audio("DrumRoll.mp3")
-            #st.rerun()
+            st.stop()
 
     with col2:
         if st.button("🔄 リセット", use_container_width=True):
@@ -143,7 +143,7 @@ if state.phase == "rolling":
             state.backup_csv = buf.getvalue()
 
     state.phase = "idle"
-    #st.rerun()
+    st.stop()
 
 
 # =========================
