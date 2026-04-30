@@ -109,7 +109,7 @@ if not VIEW_ONLY:
             disabled=(state.phase != "idle")
         ):
             state.phase = "rolling"
-            play_audio("DrumLoll.mp3")
+            play_audio("DrumRoll.mp3")
             st.rerun()
 
     with col2:
@@ -126,11 +126,11 @@ if state.phase == "rolling":
         state.last = num
         state.draw_count += 1
 
-        play_audio("DrumLoll_Finish.mp3")
+        play_audio("DrumRoll_Finish.mp3")
 
         # BINGO演出（例：5個以上で）
         if len(state.drawn) >= 5:
-            play_audio("bimgo.mp3")
+            play_audio("bingo.mp3")
 
         # 自動バックアップ
         if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
