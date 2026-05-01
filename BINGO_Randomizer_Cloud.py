@@ -133,7 +133,7 @@ if state.phase == "idle":
             if st.button("🎲 抽 選", use_container_width=True):
                 state.phase = "rolling"
                 state.phase_started_at = time.monotonic()
-                state.sound_to_play = "drumroll.mp3"
+                state.sound_to_play = "DrumRoll.mp3"
                 st.rerun()
 
         with col2:
@@ -152,7 +152,7 @@ elif state.phase == "rolling":
     else:
         state.phase = "revealing"
         state.reveal_started_at = time.monotonic()
-        state.sound_to_play = "draw.mp3"
+        state.sound_to_play = "DrumRoll_Finish.mp3"
         st.rerun()
 
 # ===== revealing =====
@@ -169,8 +169,8 @@ elif state.phase == "revealing":
             state.drawn.append(num)
             state.draw_count += 1
 
-            if len(state.drawn) >= 5:
-                state.sound_to_play = "bingo.mp3"
+            #if len(state.drawn) >= 5:
+            #    state.sound_to_play = "bingo.mp3"
 
             if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
                 buf = io.StringIO()
