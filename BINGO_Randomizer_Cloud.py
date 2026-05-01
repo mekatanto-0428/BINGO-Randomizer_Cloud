@@ -164,41 +164,32 @@ if not VIEW_ONLY and state.phase == "idle":
 # ======================
 # フェーズ② 5秒後に数字確定
 # ======================
+
 if state.phase == "rolling":
     elapsed = time.monotonic() - state.phase_started_at
 
     if elapsed < ROLLING_SECONDS:
-        st.info(f"抽選中…")
-        
-        # ★ 0.2秒後に再評価させる
+        st.info(f"抽選中… {int(ROLLING_SECONDS - elapsed)} 秒")
+
+        # 短い待ち + rerun で時間進行
         time.sleep(0.2)
         st.rerun()
-
     else:
-        if state.numbers:
-            num = state.numbers.pop()
-            state.drawn.append(num)
-            state.last = num
-            state.draw_count += 1
-
-            # ★ 確定音を予約
-            state.sound_to_play = "DrumRoll_Finish.mp3"
-
-            # ★ BINGO演出（例：5個以上）
-            #if len(state.drawn) >= 5:
-            #    state.sound_to_play = "bingo.mp3"
-
-            # 自動バックアップ
-            if state.draw_count % AUTO_BACKUP_INTERVAL == 5:
-                buf = io.StringIO()
-                w = csv.writer(buf)
-                w.writerow(["順番", "数字"])
-                for i, n in enumerate(state.drawn, 1):
-                    w.writerow([i, n])
-                state.backup_csv = buf.getvalue()
+        # ---- 数字確定 ----
+        num = state.numbers.pop()
+        state.last = num
+        state.drawn.append(num)
 
         state.phase = "idle"
         state.phase_started_at = None
+
+        # 確定音を鳴らす予約などがあればここ
+        play_audio("DrumRoll_Finish.mp3")
+
+        # BINGO演出（例：5個以上で）
+        #if len(state.drawn) >= 5:
+        #    play_audio("bingo.mp3")
+        
         st.rerun()
 
 # ======================
