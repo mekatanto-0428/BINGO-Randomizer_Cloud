@@ -1,14 +1,14 @@
 import streamlit as st
 import random, csv, io, os, time
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
 
 # ======================
-# 管理者設定
+# 設定
 # ======================
 ADMIN_PIN = os.environ.get("ADMIN_PIN", "0000")
-AUTO_BACKUP_INTERVAL = 5
 ROLLING_SECONDS = 5
+AUTO_BACKUP_INTERVAL = 5
 
 # ======================
 # 共有状態（複数司会対応）
@@ -20,11 +20,19 @@ def get_state():
         numbers: list = field(default_factory=lambda: random.sample(range(1, 76), 75))
         drawn: list = field(default_factory=list)
         last: int | None = None
-        phase: str = "idle"          # idle / rolling
+
+        # フェーズ制御
+        phase: str = "idle"                 # idle / rolling
         phase_started_at: float | None = None
+
+        # 音声管理（★ここが重要）
+        sound_to_play: str | None = None
+
+        # その他
         draw_count: int = 0
         backup_csv: str | None = None
         confirm_reset: bool = False
+
     return State()
 
 state = get_state()
@@ -50,6 +58,45 @@ if not VIEW_ONLY:
     },700);
     </script>
     """, unsafe_allow_html=True)
+
+# ======================
+# 効果音設定（司会のみ）
+# ======================
+sound_on = False
+volume = 1.0
+
+if not VIEW_ONLY:
+    with st.expander("🔊 効果音設定", expanded=False):
+        sound_on = st.toggle("効果音ON", value=True)
+        volume = st.slider("音量", 0.0, 1.0, 0.8, 0.1)
+
+# ======================
+# 音声再生（描画フェーズ専用）
+# ======================
+def play_audio_if_needed():
+    """状態に応じて一度だけ音を再生する"""
+    if VIEW_ONLY or not sound_on:
+        return
+
+    if state.sound_to_play:
+        try:
+            with open(state.sound_to_play, "rb") as f:
+                st.audio(
+                    f.read(),
+                    format="audio/mp3",
+                    autoplay=True,
+                    start_time=0
+                )
+        except Exception as e:
+            st.warning(f"音声再生エラー: {state.sound_to_play}")
+            st.exception(e)
+
+        # ★ 重要：1回再生したら必ずクリア
+        state.sound_to_play = None
+
+
+# ===== 描画開始時に必ず呼ぶ =====
+play_audio_if_needed()
 
 # ======================
 # LED風CSS
@@ -85,34 +132,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# =========================
-# 効果音ON/OFF（司会のみ）
-# =========================
-sound_on = False
-if not VIEW_ONLY:
-    sound_on = st.toggle("🔊 効果音ON", value=True)
-
-def play_audio(filename):
-    if VIEW_ONLY or not sound_on:
-        return
-
-    try:
-        with open(filename, "rb") as f:
-            st.audio(f.read(), format="audio/mp3", autoplay=True)
-    except Exception as e:
-        st.error(f"音声再生エラー: {filename}")
-        st.exception(e)
-
 # ======================
 # タイトル
 # ======================
-st.markdown(
-    "<h1 style='text-align:center;font-size:56px;'>🎉 BINGO大会 🎉</h1>",
-    unsafe_allow_html=True
-)
+st.markdown("<h1 style='text-align:center;'>🎉 BINGO大会 🎉</h1>", unsafe_allow_html=True)
 
 # ======================
-# 特大数字 / LED表示
+# 特大数字（LED）
 # ======================
 led_class = "led-rolling" if state.phase == "rolling" else "led-idle"
 display_text = state.last if state.last else "START"
@@ -123,25 +149,20 @@ st.markdown(
 )
 
 # ======================
-# 操作ボタン（司会のみ）
+# フェーズ① 抽選開始
 # ======================
-if not VIEW_ONLY:
-    col1, col2 = st.columns(2)
+if not VIEW_ONLY and state.phase == "idle":
+    if st.button("🎲 抽 選", use_container_width=True):
+        state.phase = "rolling"
+        state.phase_started_at = time.monotonic()
 
-    with col1:
-        if st.button("🎲 抽 選", use_container_width=True,
-                     disabled=(state.phase != "idle")):
-            state.phase = "rolling"
-            play_audio("DrumRoll.mp3")
-            state.phase_started_at = time.monotonic()
-            st.rerun()
+        # ★ ドラムロール音を予約
+        state.sound_to_play = "DrumRoll.mp3"
 
-    with col2:
-        if st.button("🔄 リセット", use_container_width=True):
-            state.confirm_reset = True
+        st.rerun()
 
 # ======================
-# フェーズ②：5秒経過後に数字確定
+# フェーズ② 5秒後に数字確定
 # ======================
 if state.phase == "rolling":
     elapsed = time.monotonic() - state.phase_started_at
@@ -155,10 +176,16 @@ if state.phase == "rolling":
             state.drawn.append(num)
             state.last = num
             state.draw_count += 1
-            play_audio("DrumRoll_Finish.mp3")
-            
+
+            # ★ 確定音を予約
+            state.sound_to_play = "DrumRoll_Finish.mp3"
+
+            # ★ BINGO演出（例：5個以上）
+            #if len(state.drawn) >= 5:
+            #    state.sound_to_play = "bingo.mp3"
+
             # 自動バックアップ
-            if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
+            if state.draw_count % AUTO_BACKUP_INTERVAL == 5:
                 buf = io.StringIO()
                 w = csv.writer(buf)
                 w.writerow(["順番", "数字"])
@@ -169,26 +196,6 @@ if state.phase == "rolling":
         state.phase = "idle"
         state.phase_started_at = None
         st.rerun()
-
-# ======================
-# リセット確認
-# ======================
-if state.confirm_reset and not VIEW_ONLY:
-    st.warning("⚠️ 本当にリセットしますか？")
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("✅ はい"):
-            state.numbers = random.sample(range(1, 76), 75)
-            state.drawn.clear()
-            state.last = None
-            state.draw_count = 0
-            state.backup_csv = None
-            state.phase = "idle"
-            state.confirm_reset = False
-            st.success("リセットしました")
-    with c2:
-        if st.button("❌ いいえ"):
-            state.confirm_reset = False
 
 # ======================
 # CSVダウンロード
@@ -207,71 +214,3 @@ if state.drawn:
         mime="text/csv",
         use_container_width=True
     )
-
-# 自動バックアップDL
-if state.backup_csv:
-    st.download_button(
-        "🛟 自動バックアップCSVを保存",
-        state.backup_csv,
-        file_name=f"backup_bingo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-
-# ======================
-# CSV復元（管理者）
-# ======================
-if not VIEW_ONLY:
-    st.divider()
-    st.markdown("## 🔐 CSVから復元（管理者専用）")
-
-    pin = st.text_input("管理者PIN", type="password")
-    up = st.file_uploader("保存済みCSV", type=["csv"])
-
-    if st.button("復元実行"):
-        if pin != ADMIN_PIN:
-            st.error("管理者PINが違います")
-        elif not up:
-            st.error("CSVを選択してください")
-        else:
-            reader = csv.reader(io.StringIO(up.getvalue().decode("utf-8")))
-            rows = list(reader)
-            nums = [int(r[1]) for r in rows[1:]]
-            state.drawn = nums[:]
-            state.last = nums[-1] if nums else None
-            state.numbers = list(set(range(1, 76)) - set(nums))
-            random.shuffle(state.numbers)
-            state.phase = "idle"
-            state.phase_started_at = None
-            st.success("✅ 抽選状態を復元しました")
-
-# ======================
-# B I N G O 表
-# ======================
-st.divider()
-st.markdown("<h2 style='text-align:center;'>出た数字</h2>", unsafe_allow_html=True)
-
-cols = st.columns(5)
-labels = {
-    "B": range(1,16),
-    "I": range(16,31),
-    "N": range(31,46),
-    "G": range(46,61),
-    "O": range(61,76),
-}
-
-for col, (lab, rng) in zip(cols, labels.items()):
-    with col:
-        st.markdown(f"<h3 style='text-align:center'>{lab}</h3>", unsafe_allow_html=True)
-        for n in rng:
-            if n in state.drawn:
-                st.markdown(
-                    f"<div style='background:#2ecc71;color:white;"
-                    f"text-align:center;font-size:26px;margin:5px;border-radius:8px;'>{n}</div>",
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(
-                    f"<div style='text-align:center;font-size:22px;margin:5px;color:#aaa;'>{n}</div>",
-                    unsafe_allow_html=True
-                )
