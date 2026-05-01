@@ -184,11 +184,11 @@ if state.phase == "rolling":
         state.phase_started_at = None
 
         # 確定音を鳴らす予約などがあればここ
-        play_audio("DrumRoll_Finish.mp3")
+        state.sound_to_play = "DrumRoll_Finish.mp3"
 
         # BINGO演出（例：5個以上で）
         #if len(state.drawn) >= 5:
-        #    play_audio("bingo.mp3")
+        #    state.sound_to_play = "bingo.mp3"
         
         st.rerun()
 
