@@ -6,12 +6,13 @@ from datetime import datetime
 # ======================
 # 設定
 # ======================
-ADMIN_PIN = os.environ.get("ADMIN_PIN", "0000")
-ROLLING_SECONDS = 5
+ROLLING_SECONDS = 5              # 抽選演出時間
+REVEAL_SOUND_WAIT = 1.5          # MP3再生後のタメ時間
 AUTO_BACKUP_INTERVAL = 5
+ADMIN_PIN = os.environ.get("ADMIN_PIN", "0000")
 
 # ======================
-# 共有状態（複数司会対応）
+# 共有状態
 # ======================
 @st.cache_resource
 def get_state():
@@ -21,17 +22,17 @@ def get_state():
         drawn: list = field(default_factory=list)
         last: int | None = None
 
-        # フェーズ制御
-        phase: str = "idle"                 # idle / rolling
+        # フェーズ
+        phase: str = "idle"              # idle / rolling / revealing
         phase_started_at: float | None = None
+        reveal_started_at: float | None = None
 
-        # 音声管理（★ここが重要）
+        # 音声予約
         sound_to_play: str | None = None
 
         # その他
         draw_count: int = 0
         backup_csv: str | None = None
-        confirm_reset: bool = False
 
     return State()
 
@@ -47,7 +48,6 @@ VIEW_ONLY = st.query_params.get("view") == "viewer"
 # ======================
 st.set_page_config(layout="wide", page_title="BINGO大会")
 
-# 起動時フルスクリーン（司会のみ）
 if not VIEW_ONLY:
     st.markdown("""
     <script>
@@ -60,46 +60,32 @@ if not VIEW_ONLY:
     """, unsafe_allow_html=True)
 
 # ======================
-# 効果音設定（司会のみ）
+# 効果音設定
 # ======================
 sound_on = False
-volume = 1.0
-
 if not VIEW_ONLY:
-    with st.expander("🔊 効果音設定", expanded=False):
+    with st.expander("🔊 効果音設定"):
         sound_on = st.toggle("効果音ON", value=True)
-        volume = st.slider("音量", 0.0, 1.0, 0.8, 0.1)
 
 # ======================
-# 音声再生（描画フェーズ専用）
+# 音声再生（描画時）
 # ======================
 def play_audio_if_needed():
-    """状態に応じて一度だけ音を再生する"""
     if VIEW_ONLY or not sound_on:
         return
-
     if state.sound_to_play:
         try:
             with open(state.sound_to_play, "rb") as f:
-                st.audio(
-                    f.read(),
-                    format="audio/mp3",
-                    autoplay=True,
-                    start_time=0
-                )
+                st.audio(f.read(), format="audio/mp3", autoplay=True)
         except Exception as e:
-            st.warning(f"音声再生エラー: {state.sound_to_play}")
+            st.warning(f"音声エラー: {state.sound_to_play}")
             st.exception(e)
-
-        # ★ 重要：1回再生したら必ずクリア
         state.sound_to_play = None
 
-
-# ===== 描画開始時に必ず呼ぶ =====
 play_audio_if_needed()
 
 # ======================
-# LED風CSS
+# LED CSS
 # ======================
 st.markdown("""
 <style>
@@ -133,14 +119,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ======================
-# タイトル
+# タイトル & 表示
 # ======================
 st.markdown("<h1 style='text-align:center;'>🎉 BINGO大会 🎉</h1>", unsafe_allow_html=True)
 
-# ======================
-# 特大数字（LED）
-# ======================
-led_class = "led-rolling" if state.phase == "rolling" else "led-idle"
+led_class = "led-rolling" if state.phase in ("rolling", "revealing") else "led-idle"
 display_text = state.last if state.last else "START"
 
 st.markdown(
@@ -149,47 +132,63 @@ st.markdown(
 )
 
 # ======================
-# フェーズ① 抽選開始
+# フェーズ① idle → rolling
 # ======================
 if not VIEW_ONLY and state.phase == "idle":
     if st.button("🎲 抽 選", use_container_width=True):
         state.phase = "rolling"
         state.phase_started_at = time.monotonic()
-
-        # ★ ドラムロール音を予約
         state.sound_to_play = "DrumRoll.mp3"
-
         st.rerun()
 
 # ======================
-# フェーズ② 5秒後に数字確定
+# フェーズ② rolling（5秒演出）
 # ======================
-
 if state.phase == "rolling":
     elapsed = time.monotonic() - state.phase_started_at
 
     if elapsed < ROLLING_SECONDS:
         st.info(f"抽選中… {int(ROLLING_SECONDS - elapsed)} 秒")
-
-        # 短い待ち + rerun で時間進行
         time.sleep(0.2)
         st.rerun()
     else:
-        # ---- 数字確定 ----
-        num = state.numbers.pop()
-        state.last = num
-        state.drawn.append(num)
+        state.phase = "revealing"
+        state.reveal_started_at = time.monotonic()
+        state.sound_to_play = "DrumRoll_Finish.mp3"
+        st.rerun()
+
+# ======================
+# フェーズ③ revealing（MP3後に数字表示）
+# ======================
+if state.phase == "revealing":
+    elapsed = time.monotonic() - state.reveal_started_at
+
+    if elapsed < REVEAL_SOUND_WAIT:
+        st.info("結果発表…")
+        time.sleep(0.1)
+        st.rerun()
+    else:
+        if state.numbers:
+            num = state.numbers.pop()
+            state.drawn.append(num)
+            state.last = num
+            state.draw_count += 1
+
+            #bingo演出
+            #if len(state.drawn) >= 5:
+            #    state.sound_to_play = "bingo.mp3"
+
+            if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
+                buf = io.StringIO()
+                w = csv.writer(buf)
+                w.writerow(["順番", "数字"])
+                for i, n in enumerate(state.drawn, 1):
+                    w.writerow([i, n])
+                state.backup_csv = buf.getvalue()
 
         state.phase = "idle"
         state.phase_started_at = None
-
-        # 確定音を鳴らす予約などがあればここ
-        state.sound_to_play = "DrumRoll_Finish.mp3"
-
-        # BINGO演出（例：5個以上で）
-        #if len(state.drawn) >= 5:
-        #    state.sound_to_play = "bingo.mp3"
-        
+        state.reveal_started_at = None
         st.rerun()
 
 # ======================
