@@ -7,7 +7,7 @@ from datetime import datetime
 # 設定
 # ======================
 ROLLING_SECONDS = 5              # 抽選演出時間
-REVEAL_SOUND_WAIT = 1.5          # MP3再生後のタメ時間
+REVEAL_SOUND_WAIT = 2         # MP3再生後のタメ時間
 AUTO_BACKUP_INTERVAL = 5
 ADMIN_PIN = os.environ.get("ADMIN_PIN", "0000")
 
