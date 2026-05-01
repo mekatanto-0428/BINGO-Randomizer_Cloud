@@ -1,17 +1,17 @@
 import streamlit as st
-import time, random, csv, io, os
+import time, random, csv, io
 from dataclasses import dataclass, field
 from datetime import datetime
 
 # ======================
-# 設定
+# 設定値
 # ======================
-ROLLING_SECONDS = 7
-REVEAL_WAIT = 2
-AUTO_BACKUP_INTERVAL = 5
+ROLLING_SECONDS = 5       # 抽選演出時間
+REVEAL_WAIT = 1.5         # MP3後のタメ時間
+AUTO_BACKUP_INTERVAL = 5  # 自動バックアップ間隔
 
 # ======================
-# 共有状態（複数司会）
+# 共有状態（複数端末対応）
 # ======================
 @st.cache_resource
 def get_state():
@@ -21,7 +21,7 @@ def get_state():
         drawn: list = field(default_factory=list)
         last: int | None = None
 
-        phase: str = "idle"           # idle / rolling / revealing
+        phase: str = "idle"   # idle / rolling / revealing
         phase_started_at: float | None = None
         reveal_started_at: float | None = None
 
@@ -29,18 +29,21 @@ def get_state():
 
         draw_count: int = 0
         backup_csv: str | None = None
+        confirm_reset: bool = False
 
     return State()
 
 state = get_state()
 
+# 観客モード判定
 VIEW_ONLY = st.query_params.get("view") == "viewer"
 
 # ======================
-# UI設定
+# ページ設定
 # ======================
 st.set_page_config(layout="wide", page_title="BINGO大会")
 
+# 起動時フルスクリーン（司会のみ）
 if not VIEW_ONLY:
     st.markdown("""
     <script>
@@ -53,15 +56,12 @@ if not VIEW_ONLY:
     """, unsafe_allow_html=True)
 
 # ======================
-# 効果音設定
+# 効果音 ON/OFF
 # ======================
 sound_on = False
 if not VIEW_ONLY:
     sound_on = st.toggle("🔊 効果音ON", value=True)
 
-# ======================
-# 音声再生（描画時に1回だけ）
-# ======================
 audio_box = st.empty()
 
 def play_audio_if_needed():
@@ -72,6 +72,7 @@ def play_audio_if_needed():
             audio_box.audio(f.read(), format="audio/mp3", autoplay=True)
         state.sound_to_play = None
 
+# 再生チェック（描画ごとに必ず最初）
 play_audio_if_needed()
 
 # ======================
@@ -113,37 +114,33 @@ st.markdown("""
 # ======================
 st.markdown("<h1 style='text-align:center;'>🎉 BINGO大会 🎉</h1>", unsafe_allow_html=True)
 
-# ======================
-# 表示プレースホルダ（重要）
-# ======================
+# 表示プレースホルダ
 number_box = st.empty()
 status_box = st.empty()
 
-led_class = "led-rolling" if state.phase in ("rolling", "revealing") else "led-idle"
-number_box.markdown(
-    f"<div class='led-box {led_class}'>{state.last if state.last else 'START'}</div>",
-    unsafe_allow_html=True
-)
+# ======================
+# フェーズ制御
+# ======================
 
-# ======================
-# idle
-# ======================
+# ===== idle =====
 if state.phase == "idle":
     status_box.info("待機中")
 
     if not VIEW_ONLY:
         col1, col2 = st.columns(2)
 
-    with col1:
-        if not VIEW_ONLY and st.button("🎲 抽 選"):
-            state.phase = "rolling"
-            state.phase_started_at = time.monotonic()
-            state.sound_to_play = "DrumRoll.mp3"
-            st.rerun()
+        with col1:
+            if st.button("🎲 抽 選", use_container_width=True):
+                state.phase = "rolling"
+                state.phase_started_at = time.monotonic()
+                state.sound_to_play = "drumroll.mp3"
+                st.rerun()
 
-# ======================
-# rolling
-# ======================
+        with col2:
+            if st.button("🔄 リセット", use_container_width=True):
+                state.confirm_reset = True
+
+# ===== rolling =====
 elif state.phase == "rolling":
     elapsed = time.monotonic() - state.phase_started_at
     remain = int(ROLLING_SECONDS - elapsed)
@@ -155,18 +152,16 @@ elif state.phase == "rolling":
     else:
         state.phase = "revealing"
         state.reveal_started_at = time.monotonic()
-        state.sound_to_play = "DrumRoll_Finish.mp3"
+        state.sound_to_play = "draw.mp3"
         st.rerun()
 
-# ======================
-# revealing（音 → タメ → 数字）
-# ======================
+# ===== revealing =====
 elif state.phase == "revealing":
-    elapsed = time.monotonic() - state.reveal_started_at
     status_box.success("結果発表！")
+    elapsed = time.monotonic() - state.reveal_started_at
 
     if elapsed < REVEAL_WAIT:
-        st.stop()   # 音を鳴らし切る
+        st.stop()  # 音を最後まで鳴らす
     else:
         if state.numbers:
             num = state.numbers.pop()
@@ -174,8 +169,8 @@ elif state.phase == "revealing":
             state.drawn.append(num)
             state.draw_count += 1
 
-            #if len(state.drawn) >= 5:
-            #    state.sound_to_play = "bingo.mp3"
+            if len(state.drawn) >= 5:
+                state.sound_to_play = "bingo.mp3"
 
             if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
                 buf = io.StringIO()
@@ -189,6 +184,37 @@ elif state.phase == "revealing":
         state.phase_started_at = None
         state.reveal_started_at = None
         st.rerun()
+
+# ======================
+# リセット確認
+# ======================
+if state.confirm_reset and not VIEW_ONLY:
+    st.warning("⚠️ 本当にリセットしますか？")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("✅ はい（リセット）", use_container_width=True):
+            state.numbers = random.sample(range(1, 76), 75)
+            state.drawn.clear()
+            state.last = None
+            state.phase = "idle"
+            state.draw_count = 0
+            state.backup_csv = None
+            state.confirm_reset = False
+            st.success("リセットしました")
+
+    with c2:
+        if st.button("❌ いいえ", use_container_width=True):
+            state.confirm_reset = False
+
+# ======================
+# 数字表示（必ず最後）
+# ======================
+led_class = "led-rolling" if state.phase in ("rolling", "revealing") else "led-idle"
+number_box.markdown(
+    f"<div class='led-box {led_class}'>{state.last if state.last else 'START'}</div>",
+    unsafe_allow_html=True
+)
 
 # ======================
 # CSVダウンロード
