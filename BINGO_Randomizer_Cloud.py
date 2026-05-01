@@ -207,3 +207,34 @@ if state.drawn:
         mime="text/csv",
         use_container_width=True
     )
+
+# =========================
+# B I N G O 列表示
+# =========================
+st.divider()
+st.markdown("<h2 style='text-align:center;'>出た数字</h2>", unsafe_allow_html=True)
+
+cols = st.columns(5)
+labels = {
+    "B": range(1,16),
+    "I": range(16,31),
+    "N": range(31,46),
+    "G": range(46,61),
+    "O": range(61,76),
+}
+
+for col, (lab, rng) in zip(cols, labels.items()):
+    with col:
+        st.markdown(f"<h3 style='text-align:center'>{lab}</h3>", unsafe_allow_html=True)
+        for n in rng:
+            if n in state.drawn:
+                st.markdown(
+                    f"<div style='background:#2ecc71;color:white;"
+                    f"text-align:center;font-size:26px;margin:5px;border-radius:8px;'>{n}</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f"<div style='text-align:center;font-size:22px;margin:5px;color:#aaa;'>{n}</div>",
+                    unsafe_allow_html=True
+                )
