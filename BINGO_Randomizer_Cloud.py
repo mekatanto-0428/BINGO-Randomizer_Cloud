@@ -168,8 +168,12 @@ if state.phase == "rolling":
     elapsed = time.monotonic() - state.phase_started_at
 
     if elapsed < ROLLING_SECONDS:
-        st.info(f"抽選中… {int(ROLLING_SECONDS - elapsed)} 秒")
-        st.stop()
+        st.info(f"抽選中…")
+        
+        # ★ 0.2秒後に再評価させる
+        time.sleep(0.2)
+        st.rerun()
+
     else:
         if state.numbers:
             num = state.numbers.pop()
