@@ -130,11 +130,16 @@ number_box.markdown(
 # ======================
 if state.phase == "idle":
     status_box.info("待機中")
-    if not VIEW_ONLY and st.button("🎲 抽 選"):
-        state.phase = "rolling"
-        state.phase_started_at = time.monotonic()
-        state.sound_to_play = "DrumRoll.mp3"
-        st.rerun()
+
+    if not VIEW_ONLY:
+        col1, col2 = st.columns(2)
+
+    with col1:
+        if not VIEW_ONLY and st.button("🎲 抽 選"):
+            state.phase = "rolling"
+            state.phase_started_at = time.monotonic()
+            state.sound_to_play = "DrumRoll.mp3"
+            st.rerun()
 
 # ======================
 # rolling
