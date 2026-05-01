@@ -1,17 +1,18 @@
 import streamlit as st
-import random, csv, io, os
+import random, csv, io, os, time
 from datetime import datetime
 from dataclasses import dataclass, field
 
-# =========================
+# ======================
 # 管理者設定
-# =========================
+# ======================
 ADMIN_PIN = os.environ.get("ADMIN_PIN", "0000")
 AUTO_BACKUP_INTERVAL = 5
+ROLLING_SECONDS = 5
 
-# =========================
+# ======================
 # 共有状態（複数司会対応）
-# =========================
+# ======================
 @st.cache_resource
 def get_state():
     @dataclass
@@ -20,6 +21,7 @@ def get_state():
         drawn: list = field(default_factory=list)
         last: int | None = None
         phase: str = "idle"          # idle / rolling
+        phase_started_at: float | None = None
         draw_count: int = 0
         backup_csv: str | None = None
         confirm_reset: bool = False
@@ -27,14 +29,14 @@ def get_state():
 
 state = get_state()
 
-# =========================
+# ======================
 # モード判定
-# =========================
+# ======================
 VIEW_ONLY = st.query_params.get("view") == "viewer"
 
-# =========================
+# ======================
 # UI設定
-# =========================
+# ======================
 st.set_page_config(layout="wide", page_title="BINGO大会")
 
 # 起動時フルスクリーン（司会のみ）
@@ -49,6 +51,40 @@ if not VIEW_ONLY:
     </script>
     """, unsafe_allow_html=True)
 
+# ======================
+# LED風CSS
+# ======================
+st.markdown("""
+<style>
+.led-box {
+  font-size: 160px;
+  text-align: center;
+  font-weight: bold;
+  padding: 40px;
+  border-radius: 30px;
+  margin-bottom: 20px;
+}
+.led-idle {
+  background: black;
+  color: white;
+}
+.led-rolling {
+  background: black;
+  color: #00ffcc;
+  animation: blink 0.7s infinite, glow 1.5s infinite alternate;
+}
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+@keyframes glow {
+  from { box-shadow: 0 0 10px #00ffcc; }
+  to { box-shadow: 0 0 40px #00ffcc; }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # =========================
 # 効果音ON/OFF（司会のみ）
 # =========================
@@ -59,6 +95,7 @@ if not VIEW_ONLY:
 def play_audio(filename):
     if VIEW_ONLY or not sound_on:
         return
+
     try:
         with open(filename, "rb") as f:
             st.audio(f.read(), format="audio/mp3", autoplay=True)
@@ -66,90 +103,76 @@ def play_audio(filename):
         st.error(f"音声再生エラー: {filename}")
         st.exception(e)
 
-# =========================
+# ======================
 # タイトル
-# =========================
+# ======================
 st.markdown(
     "<h1 style='text-align:center;font-size:56px;'>🎉 BINGO大会 🎉</h1>",
     unsafe_allow_html=True
 )
 
-# =========================
-# プロジェクター向け特大数字
-# =========================
+# ======================
+# 特大数字 / LED表示
+# ======================
+led_class = "led-rolling" if state.phase == "rolling" else "led-idle"
+display_text = state.last if state.last else "START"
+
 st.markdown(
-    f"""
-    <div style="
-      font-size:160px;
-      text-align:center;
-      color:white;
-      background:#000;
-      padding:40px;
-      border-radius:30px;
-      margin-bottom:20px;">
-      {state.last if state.last else "START"}
-    </div>
-    """,
+    f"<div class='led-box {led_class}'>{display_text}</div>",
     unsafe_allow_html=True
 )
 
-# =========================
-# 操作ボタン
-# =========================
-
-# =====================
-# フェーズ①：抽選開始
-# =====================
+# ======================
+# 操作ボタン（司会のみ）
+# ======================
 if not VIEW_ONLY:
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button(
-            "🎲 抽 選",
-            use_container_width=True,
-            disabled=(state.phase != "idle")
-        ):
-            
+        if st.button("🎲 抽 選", use_container_width=True,
+                     disabled=(state.phase != "idle")):
             state.phase = "rolling"
             play_audio("DrumRoll.mp3")
+            state.phase_started_at = time.monotonic()
             st.rerun()
 
     with col2:
         if st.button("🔄 リセット", use_container_width=True):
             state.confirm_reset = True
 
-# =====================
-# フェーズ②：次の rerun で数字確定
-# =====================
+# ======================
+# フェーズ②：5秒経過後に数字確定
+# ======================
 if state.phase == "rolling":
-    if state.numbers:
-        num = state.numbers.pop()
-        state.drawn.append(num)
-        state.last = num
-        state.draw_count += 1
+    elapsed = time.monotonic() - state.phase_started_at
 
-        play_audio("DrumRoll_Finish.mp3")
+    if elapsed < ROLLING_SECONDS:
+        st.info(f"抽選中… {int(ROLLING_SECONDS - elapsed)} 秒")
+        st.stop()
+    else:
+        if state.numbers:
+            num = state.numbers.pop()
+            state.drawn.append(num)
+            state.last = num
+            state.draw_count += 1
+            play_audio("DrumRoll_Finish.mp3")
+            
+            # 自動バックアップ
+            if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
+                buf = io.StringIO()
+                w = csv.writer(buf)
+                w.writerow(["順番", "数字"])
+                for i, n in enumerate(state.drawn, 1):
+                    w.writerow([i, n])
+                state.backup_csv = buf.getvalue()
 
-        # BINGO演出（例：5個以上で）
-        #if len(state.drawn) >= 5:
-        #    play_audio("bingo.mp3")
+        state.phase = "idle"
+        state.phase_started_at = None
+        st.rerun()
 
-        # 自動バックアップ
-        if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
-            buf = io.StringIO()
-            w = csv.writer(buf)
-            w.writerow(["順番", "数字"])
-            for i, n in enumerate(state.drawn, 1):
-                w.writerow([i, n])
-            state.backup_csv = buf.getvalue()
-
-    state.phase = "idle"
-    st.rerun()
-
-
-# =========================
-# リセット確認ダイアログ
-# =========================
+# ======================
+# リセット確認
+# ======================
 if state.confirm_reset and not VIEW_ONLY:
     st.warning("⚠️ 本当にリセットしますか？")
     c1, c2 = st.columns(2)
@@ -160,15 +183,16 @@ if state.confirm_reset and not VIEW_ONLY:
             state.last = None
             state.draw_count = 0
             state.backup_csv = None
+            state.phase = "idle"
             state.confirm_reset = False
             st.success("リセットしました")
     with c2:
         if st.button("❌ いいえ"):
             state.confirm_reset = False
 
-# =========================
+# ======================
 # CSVダウンロード
-# =========================
+# ======================
 if state.drawn:
     buf = io.StringIO()
     w = csv.writer(buf)
@@ -194,9 +218,9 @@ if state.backup_csv:
         use_container_width=True
     )
 
-# =========================
-# CSV復元（管理者PIN）
-# =========================
+# ======================
+# CSV復元（管理者）
+# ======================
 if not VIEW_ONLY:
     st.divider()
     st.markdown("## 🔐 CSVから復元（管理者専用）")
@@ -217,11 +241,13 @@ if not VIEW_ONLY:
             state.last = nums[-1] if nums else None
             state.numbers = list(set(range(1, 76)) - set(nums))
             random.shuffle(state.numbers)
+            state.phase = "idle"
+            state.phase_started_at = None
             st.success("✅ 抽選状態を復元しました")
 
-# =========================
-# B I N G O 列表示
-# =========================
+# ======================
+# B I N G O 表
+# ======================
 st.divider()
 st.markdown("<h2 style='text-align:center;'>出た数字</h2>", unsafe_allow_html=True)
 
