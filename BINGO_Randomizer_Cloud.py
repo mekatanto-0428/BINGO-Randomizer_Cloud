@@ -167,9 +167,9 @@ if not VIEW_ONLY and state.phase == "idle":
 if state.phase == "rolling":
     elapsed = time.monotonic() - state.phase_started_at
 
-    #if elapsed < ROLLING_SECONDS:
-    #    st.info(f"抽選中… {int(ROLLING_SECONDS - elapsed)} 秒")
-    #    st.stop()
+    if elapsed < ROLLING_SECONDS:
+        st.info(f"抽選中… {int(ROLLING_SECONDS - elapsed)} 秒")
+        st.stop()
     else:
         if state.numbers:
             num = state.numbers.pop()
