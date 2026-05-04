@@ -1,17 +1,17 @@
 import streamlit as st
-import random, time, csv, io, os
+import random, csv, io, os
 from datetime import datetime
 from dataclasses import dataclass, field
 
-# =========================
-# Cloud / 管理者設定
-# =========================
-ADMIN_PIN = os.environ.get("ADMIN_PIN", "0000")   # Secrets推奨
-AUTO_BACKUP_INTERVAL = 5                          # 抽選◯回ごと
+# =====================
+# 管理者・Cloud設定
+# =====================
+ADMIN_PIN = os.environ.get("ADMIN_PIN", "0000")
+AUTO_BACKUP_INTERVAL = 5
 
-# =========================
+# =====================
 # 共有状態（複数司会）
-# =========================
+# =====================
 @st.cache_resource
 def get_state():
     @dataclass
@@ -19,25 +19,23 @@ def get_state():
         numbers: list = field(default_factory=lambda: random.sample(range(1, 76), 75))
         drawn: list = field(default_factory=list)
         last: int | None = None
-        lock: bool = False
-        flash: bool = False
+        phase: str = "idle"      # idle / rolling
         draw_count: int = 0
         backup_csv: str | None = None
     return State()
 
 state = get_state()
 
-# =========================
-# モード判定（観客/司会）
-# =========================
+# =====================
+# モード判定
+# =====================
 VIEW_ONLY = st.query_params.get("view") == "viewer"
 
-# =========================
+# =====================
 # UI設定
-# =========================
+# =====================
 st.set_page_config(layout="wide", page_title="BINGO大会")
 
-# 起動時フルスクリーン（司会のみ）
 if not VIEW_ONLY:
     st.markdown("""
     <script>
@@ -49,24 +47,36 @@ if not VIEW_ONLY:
     </script>
     """, unsafe_allow_html=True)
 
-# =========================
+# =====================
+# 効果音ON/OFF（司会のみ）
+# =====================
+sound_on = False
+if not VIEW_ONLY:
+    sound_on = st.toggle("🔊 効果音ON", value=True)
+
+def play_audio(filename):
+    if VIEW_ONLY or not sound_on:
+        return
+    with open(filename, "rb") as f:
+        st.audio(f.read(), format="audio/mp3", autoplay=True)
+
+# =====================
 # タイトル
-# =========================
+# =====================
 st.markdown(
     "<h1 style='text-align:center;font-size:56px;'>🎉 BINGO大会 🎉</h1>",
     unsafe_allow_html=True
 )
 
-# =========================
+# =====================
 # 特大数字表示
-# =========================
-bg = "#ff3333" if state.flash else "#000000"
+# =====================
 st.markdown(f"""
 <div style="
   font-size:160px;
   text-align:center;
   color:white;
-  background:{bg};
+  background:#000;
   padding:40px;
   border-radius:30px;
   margin-bottom:20px;">
@@ -74,58 +84,42 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# =========================
-# 抽選・操作（司会のみ）
-# =========================
+# =====================
+# 抽選ボタン（フェーズ制御）
+# =====================
 if not VIEW_ONLY:
-    col1, col2 = st.columns(2)
+    if st.button("🎲 抽 選", use_container_width=True,
+                 disabled=(state.phase != "idle")):
+        state.phase = "rolling"
+        play_audio("drumroll.mp3")
+        st.rerun()
 
-    with col1:
-        if st.button("🎲 抽 選", use_container_width=True, disabled=state.lock):
-            if state.numbers:
-                state.lock = True
+# =====================
+# 抽選結果確定フェーズ
+# =====================
+if state.phase == "rolling":
+    if state.numbers:
+        num = state.numbers.pop()
+        state.drawn.append(num)
+        state.last = num
+        state.draw_count += 1
+        play_audio("draw.mp3")
 
-                st.audio("DrumRoll.mp3", autoplay=True)
-                time.sleep(2)
+        # 自動バックアップ
+        if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow(["順番", "数字"])
+            for i, n in enumerate(state.drawn, 1):
+                w.writerow([i, n])
+            state.backup_csv = buf.getvalue()
 
-                num = state.numbers.pop()
-                state.drawn.append(num)
-                state.last = num
-                state.draw_count += 1
+    state.phase = "idle"
+    st.rerun()
 
-                st.audio("DrumRoll_Finish.mp3", autoplay=True)
-
-                # BINGO演出
-                if len(state.drawn) >= 5:
-                    state.flash = True
-                    st.audio("bingo.mp3", autoplay=True)
-                    time.sleep(1.2)
-                    state.flash = False
-
-                # 自動バックアップ（CSV生成）
-                if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
-                    buf = io.StringIO()
-                    w = csv.writer(buf)
-                    w.writerow(["順番", "数字"])
-                    for i, n in enumerate(state.drawn, 1):
-                        w.writerow([i, n])
-                    state.backup_csv = buf.getvalue()
-
-                state.lock = False
-
-    with col2:
-        with st.expander("🔄 リセット（管理者）"):
-            if st.button("✅ リセット実行"):
-                state.numbers = random.sample(range(1, 76), 75)
-                state.drawn.clear()
-                state.last = None
-                state.draw_count = 0
-                state.backup_csv = None
-                st.success("リセットしました")
-
-# =========================
-# CSVダウンロード（正式記録）
-# =========================
+# =====================
+# CSVダウンロード
+# =====================
 if state.drawn:
     buf = io.StringIO()
     w = csv.writer(buf)
@@ -141,9 +135,9 @@ if state.drawn:
         use_container_width=True
     )
 
-# =========================
-# 自動バックアップCSV（DL）
-# =========================
+# =====================
+# 自動バックアップDL
+# =====================
 if state.backup_csv:
     st.download_button(
         "🛟 自動バックアップCSVを保存",
@@ -153,15 +147,15 @@ if state.backup_csv:
         use_container_width=True
     )
 
-# =========================
-# CSV復元（管理者PIN必須）
-# =========================
+# =====================
+# CSV復元（管理者）
+# =====================
 if not VIEW_ONLY:
     st.divider()
-    st.markdown("## 🔐 CSVから復元（管理者専用）")
+    st.markdown("## 🔐 CSVから復元（管理者）")
 
     pin = st.text_input("管理者PIN", type="password")
-    up = st.file_uploader("保存済みCSVを選択", type=["csv"])
+    up = st.file_uploader("保存済みCSV", type=["csv"])
 
     if st.button("復元実行"):
         if pin != ADMIN_PIN:
@@ -171,19 +165,16 @@ if not VIEW_ONLY:
         else:
             reader = csv.reader(io.StringIO(up.getvalue().decode("utf-8")))
             rows = list(reader)
-            if rows[0] != ["順番", "数字"]:
-                st.error("形式が正しくありません")
-            else:
-                nums = [int(r[1]) for r in rows[1:]]
-                state.drawn = nums[:]
-                state.last = nums[-1] if nums else None
-                state.numbers = list(set(range(1, 76)) - set(nums))
-                random.shuffle(state.numbers)
-                st.success("✅ 抽選状態を復元しました")
+            nums = [int(r[1]) for r in rows[1:]]
+            state.drawn = nums[:]
+            state.last = nums[-1] if nums else None
+            state.numbers = list(set(range(1, 76)) - set(nums))
+            random.shuffle(state.numbers)
+            st.success("✅ 復元しました")
 
-# =========================
-# B I N G O 表（全員）
-# =========================
+# =====================
+# B I N G O 表
+# =====================
 st.divider()
 st.markdown("<h2 style='text-align:center;'>出た数字</h2>", unsafe_allow_html=True)
 
