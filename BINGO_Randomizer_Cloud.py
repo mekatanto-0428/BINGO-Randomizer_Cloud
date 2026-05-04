@@ -97,7 +97,7 @@ if not VIEW_ONLY:
     with col1:
         if state.phase == "idle" and st.button("🎯 抽選", use_container_width=True):
             state.phase = "rolling"
-            play_audio("DrumRoll.mp3")
+            play_audio("Drumroll.mp3")
             st.stop()  # rerun防止（最重要）
 
     with col2:
