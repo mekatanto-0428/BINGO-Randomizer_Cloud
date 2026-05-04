@@ -91,7 +91,7 @@ if not VIEW_ONLY:
     if st.button("🎲 抽 選", use_container_width=True,
                  disabled=(state.phase != "idle")):
         state.phase = "rolling"
-        play_audio("drumroll.mp3")
+        play_audio("DrumRoll.mp3")
         st.rerun()
 
 # =====================
@@ -103,7 +103,7 @@ if state.phase == "rolling":
         state.drawn.append(num)
         state.last = num
         state.draw_count += 1
-        play_audio("draw.mp3")
+        play_audio("DrumRoll.mp3")
 
         # 自動バックアップ
         if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
