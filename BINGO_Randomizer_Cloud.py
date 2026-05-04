@@ -1,5 +1,4 @@
-import streamlit as st
-import random, csv, io, os
+import streamlit as st os
 from datetime import datetime
 from dataclasses import dataclass, field
 
@@ -19,7 +18,7 @@ def get_state():
         numbers: list = field(default_factory=lambda: random.sample(range(1, 76), 75))
         drawn: list = field(default_factory=list)
         last: int | None = None
-        phase: str = "idle"      # idle / rolling
+        phase: str = "idle"     # idle / rolling
         draw_count: int = 0
         backup_csv: str | None = None
         confirm_reset: bool = False
@@ -58,8 +57,11 @@ if not VIEW_ONLY:
 def play_audio(filename):
     if VIEW_ONLY or not sound_on:
         return
-    with open(filename, "rb") as f:
-        st.audio(f.read(), format="audio/mp3", autoplay=True)
+    try:
+        with open(filename, "rb") as f:
+            st.audio(f.read(), format="audio/mp3", autoplay=True)
+    except FileNotFoundError:
+        pass
 
 # =====================
 # タイトル
@@ -81,7 +83,7 @@ st.markdown(f"""
   padding:40px;
   border-radius:30px;
   margin-bottom:20px;">
-  {state.last if state.last else "START"}
+  {state.last if state.last is not None else "START"}
 </div>
 """, unsafe_allow_html=True)
 
@@ -92,34 +94,34 @@ if not VIEW_ONLY:
     col1, col2 = st.columns(2)
 
     with col1:
-        # フェーズ①（idle → rolling）
         if state.phase == "idle" and st.button("🎯 抽選", use_container_width=True):
-        state.phase = "rolling"
-        play_audio("DrumRoll.mp3")
-        st.stop() # ✅ rerunしない。ここが最重要
+            state.phase = "rolling"
+            play_audio("DrumRoll.mp3")
+            st.stop()  # rerun防止（最重要）
 
     with col2:
         if st.button("🔄 リセット", use_container_width=True):
             state.confirm_reset = True
 
-
 # =====================
 # 抽選結果確定フェーズ
 # =====================
-# フェーズ②（次の実行）
 if state.phase == "rolling":
     num = state.numbers.pop()
     state.last = num
+    state.drawn.append(num)
+    state.draw_count += 1
+
     play_audio("DrumRoll_Finish.mp3")
-    
-        # 自動バックアップ
-        if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
-            buf = io.StringIO()
-            w = csv.writer(buf)
-            w.writerow(["順番", "数字"])
-            for i, n in enumerate(state.drawn, 1):
-                w.writerow([i, n])
-            state.backup_csv = buf.getvalue()
+
+    # 自動バックアップ
+    if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["順番", "数字"])
+        for i, n in enumerate(state.drawn, 1):
+            w.writerow([i, n])
+        state.backup_csv = buf.getvalue()
 
     state.phase = "idle"
     st.rerun()
@@ -130,6 +132,7 @@ if state.phase == "rolling":
 if state.confirm_reset and not VIEW_ONLY:
     st.warning("⚠️ 本当にリセットしますか？")
     c1, c2 = st.columns(2)
+
     with c1:
         if st.button("✅ はい"):
             state.numbers = random.sample(range(1, 76), 75)
@@ -139,6 +142,7 @@ if state.confirm_reset and not VIEW_ONLY:
             state.backup_csv = None
             state.confirm_reset = False
             st.success("リセットしました")
+
     with c2:
         if st.button("❌ いいえ"):
             state.confirm_reset = False
@@ -194,6 +198,7 @@ if not VIEW_ONLY:
             nums = [int(r[1]) for r in rows[1:]]
             state.drawn = nums[:]
             state.last = nums[-1] if nums else None
+            state.draw_count = len(nums)
             state.numbers = list(set(range(1, 76)) - set(nums))
             random.shuffle(state.numbers)
             st.success("✅ 復元しました")
@@ -206,11 +211,11 @@ st.markdown("<h2 style='text-align:center;'>出た数字</h2>", unsafe_allow_htm
 
 cols = st.columns(5)
 labels = {
-    "B": range(1,16),
-    "I": range(16,31),
-    "N": range(31,46),
-    "G": range(46,61),
-    "O": range(61,76),
+    "B": range(1, 16),
+    "I": range(16, 31),
+    "N": range(31, 46),
+    "G": range(46, 61),
+    "O": range(61, 76),
 }
 
 for col, (lab, rng) in zip(cols, labels.items()):
@@ -220,11 +225,13 @@ for col, (lab, rng) in zip(cols, labels.items()):
             if n in state.drawn:
                 st.markdown(
                     f"<div style='background:#2ecc71;color:white;"
-                    f"text-align:center;font-size:26px;margin:5px;border-radius:8px;'>{n}</div>",
+                    f"text-align:center;font-size:26px;margin:5px;"
+                    f"border-radius:8px;'>{n}</div>",
                     unsafe_allow_html=True
                 )
             else:
                 st.markdown(
-                    f"<div style='text-align:center;font-size:22px;margin:5px;color:#aaa;'>{n}</div>",
+                    f"<div style='text-align:center;font-size:22px;"
+                    f"margin:5px;color:#aaa;'>{n}</div>",
                     unsafe_allow_html=True
                 )
