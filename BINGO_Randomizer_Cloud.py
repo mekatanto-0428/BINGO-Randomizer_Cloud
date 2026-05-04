@@ -93,10 +93,10 @@ if not VIEW_ONLY:
 
     with col1:
         # フェーズ①（idle → rolling）
-if state.phase == "idle" and 抽選ボタンが押された:
-    state.phase = "rolling"
-    play_audio("drumroll.mp3")
-    st.stop()   # ✅ rerunしない。ここが最重要
+        if state.phase == "idle" and 抽選ボタンが押された:
+        state.phase = "rolling"
+        play_audio("DrumRoll.mp3")
+        st.stop()   # ✅ rerunしない。ここが最重要
 
     with col2:
         if st.button("🔄 リセット", use_container_width=True):
