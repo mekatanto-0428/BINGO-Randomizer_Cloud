@@ -22,6 +22,7 @@ def get_state():
         phase: str = "idle"      # idle / rolling
         draw_count: int = 0
         backup_csv: str | None = None
+        confirm_reset: bool = False
     return State()
 
 state = get_state()
