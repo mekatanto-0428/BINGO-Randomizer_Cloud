@@ -92,14 +92,11 @@ if not VIEW_ONLY:
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button(
-            "🎲 抽 選",
-            use_container_width=True,
-            disabled=(state.phase != "idle")
-        ):
-            state.phase = "rolling"
-            play_audio("DrumRoll.mp3")
-            st.rerun()
+        # フェーズ①（idle → rolling）
+if state.phase == "idle" and 抽選ボタンが押された:
+    state.phase = "rolling"
+    play_audio("drumroll.mp3")
+    st.stop()   # ✅ rerunしない。ここが最重要
 
     with col2:
         if st.button("🔄 リセット", use_container_width=True):
@@ -109,14 +106,14 @@ if not VIEW_ONLY:
 # =====================
 # 抽選結果確定フェーズ
 # =====================
+# フェーズ②（次の実行）
 if state.phase == "rolling":
-    if state.numbers:
-        num = state.numbers.pop()
-        state.drawn.append(num)
-        state.last = num
-        state.draw_count += 1
-        play_audio("DrumRoll_Finish.mp3")
-
+    num = state.numbers.pop()
+    state.last = num
+    play_audio("DrumRoll_Finish.mp3")
+    state.phase = "idle"
+    st.rerun()   # ✅ ここではOK
+    
         # 自動バックアップ
         if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
             buf = io.StringIO()
