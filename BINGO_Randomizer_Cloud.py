@@ -93,10 +93,10 @@ if not VIEW_ONLY:
 
     with col1:
         # フェーズ①（idle → rolling）
-        if state.phase == "idle" and 抽選ボタンが押された:
+        if state.phase == "idle" and st.button("🎯 抽選", use_container_width=True):
         state.phase = "rolling"
         play_audio("DrumRoll.mp3")
-        st.stop()   # ✅ rerunしない。ここが最重要
+        st.stop() # ✅ rerunしない。ここが最重要
 
     with col2:
         if st.button("🔄 リセット", use_container_width=True):
@@ -111,8 +111,6 @@ if state.phase == "rolling":
     num = state.numbers.pop()
     state.last = num
     play_audio("DrumRoll_Finish.mp3")
-    state.phase = "idle"
-    st.rerun()   # ✅ ここではOK
     
         # 自動バックアップ
         if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
