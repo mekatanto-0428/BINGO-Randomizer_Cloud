@@ -88,11 +88,22 @@ st.markdown(f"""
 # 抽選ボタン（フェーズ制御）
 # =====================
 if not VIEW_ONLY:
-    if st.button("🎲 抽 選", use_container_width=True,
-                 disabled=(state.phase != "idle")):
-        state.phase = "rolling"
-        play_audio("DrumRoll.mp3")
-        st.rerun()
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button(
+            "🎲 抽 選",
+            use_container_width=True,
+            disabled=(state.phase != "idle")
+        ):
+            state.phase = "rolling"
+            play_audio("DrumRoll.mp3")
+            st.rerun()
+
+    with col2:
+        if st.button("🔄 リセット", use_container_width=True):
+            state.confirm_reset = True
+
 
 # =====================
 # 抽選結果確定フェーズ
@@ -103,7 +114,7 @@ if state.phase == "rolling":
         state.drawn.append(num)
         state.last = num
         state.draw_count += 1
-        play_audio("DrumRoll.mp3")
+        play_audio("DrumRoll_Finish.mp3")
 
         # 自動バックアップ
         if state.draw_count % AUTO_BACKUP_INTERVAL == 0:
@@ -116,6 +127,25 @@ if state.phase == "rolling":
 
     state.phase = "idle"
     st.rerun()
+
+# =========================
+# リセット確認ダイアログ
+# =========================
+if state.confirm_reset and not VIEW_ONLY:
+    st.warning("⚠️ 本当にリセットしますか？")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("✅ はい"):
+            state.numbers = random.sample(range(1, 76), 75)
+            state.drawn.clear()
+            state.last = None
+            state.draw_count = 0
+            state.backup_csv = None
+            state.confirm_reset = False
+            st.success("リセットしました")
+    with c2:
+        if st.button("❌ いいえ"):
+            state.confirm_reset = False
 
 # =====================
 # CSVダウンロード
